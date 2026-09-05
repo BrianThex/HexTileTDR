@@ -259,12 +259,12 @@ namespace LP.HexTileTDR.Core
             }
         }
 
-        private void ClearMap()
+        [ContextMenu("Clear Map")]
+        public void ClearMap()
         {
             mapGrid.Clear();
             Transform container = hexGrid != null ? hexGrid.transform : transform;
 
-            // Collect children first to avoid index skipping during removal
             List<GameObject> childrenToDestroy = new List<GameObject>();
             foreach (Transform child in container)
             {
@@ -276,10 +276,8 @@ namespace LP.HexTileTDR.Core
 
             foreach (GameObject obj in childrenToDestroy)
             {
-                // Unparent immediately so child scans don't find this object
                 obj.transform.SetParent(null);
 
-                // Disable colliders immediately so Physics.OverlapSphere won't detect dying colliders
                 foreach (Collider c in obj.GetComponentsInChildren<Collider>())
                 {
                     c.enabled = false;
