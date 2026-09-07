@@ -1,7 +1,8 @@
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace LP.HexTileTDR.Core
+namespace LP.HexTileTDR.Core.SO
+
 {
     [CreateAssetMenu(fileName = "Resource", menuName = "HexTileTDR/Resource")]
     public class ResourceSO : ScriptableObject

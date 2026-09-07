@@ -1,4 +1,5 @@
 using UnityEngine;
+using LP.HexTileTDR.Core.SO;
 
 namespace LP.HexTileTDR.Core
 {

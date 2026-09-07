@@ -1,7 +1,7 @@
 using UnityEngine;
 using System.Collections.Generic;
 
-namespace LP.HexTileTDR.Core
+namespace LP.HexTileTDR.Core.SO
 {
     [CreateAssetMenu(fileName = "Tile", menuName = "HexTileTDR/Tile")]
     public class TileSO : ScriptableObject

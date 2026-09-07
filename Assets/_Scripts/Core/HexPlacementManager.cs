@@ -12,77 +12,53 @@ namespace LP.HexTileTDR.Core
         [SerializeField] private LayerMask groundLayerMask;
         [SerializeField] private LayerMask tileLayerMask;
 
-        [Header("Tile Palette")]
-        [SerializeField] private List<GameObject> availableTilePrefabs = new List<GameObject>();
-        private int currentTileIndex = 0;
+        [Header("Tile Selection")]
+        [SerializeField] private GameObject selectedTilePrefab;
 
         [Header("Ghost Preview Settings")]
         [SerializeField] private bool enableGhostPreview = true;
         [SerializeField] private Material ghostMaterial;
 
-        // Internal State
         private readonly Dictionary<Vector3Int, GameObject> placedTiles = new Dictionary<Vector3Int, GameObject>();
         private GameObject ghostTileInstance;
-        private Renderer[] ghostRenderers;
         private bool isGhostActive;
         private float currentYRotation = 0f;
 
         private void Start()
         {
-            RebuildGhostInstance();
             RegisterPreplacedTiles();
         }
 
         private void Update()
         {
-            // Right-click to cycle through available tile prefabs
-            if (Mouse.current != null && Mouse.current.rightButton.wasPressedThisFrame)
+            // Do not display ghost if no tile is selected for placement
+            if (selectedTilePrefab == null)
             {
-                CycleNextTile();
+                SetGhostVisibility(false);
+                return;
             }
 
-            // Scroll wheel to rotate tile in 60-degree increments
-            HandleRotationInput();
-
-            // Block placement and hide preview if pointer is over UI
             if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject())
             {
                 SetGhostVisibility(false);
                 return;
             }
 
-            Vector2 mousePos = Mouse.current.position.ReadValue();
-            Ray ray = Camera.main.ScreenPointToRay(mousePos);
+            Vector2 pointerPosition = GetCurrentPointerPosition();
+            Ray ray = Camera.main.ScreenPointToRay(pointerPosition);
 
             if (Physics.Raycast(ray, out RaycastHit hit, Mathf.Infinity, groundLayerMask))
             {
                 Vector3Int cellPos = hexGrid.WorldToCell(hit.point);
                 Vector3 cellPosWorld = hexGrid.GetCellCenterWorld(cellPos);
 
-                bool isValidPlacement = CanPlaceAt(cellPos);
-
-                // Manage Ghost Preview
-                if (enableGhostPreview && isValidPlacement)
+                if (enableGhostPreview && CanPlaceAt(cellPos))
                 {
                     UpdateGhostTransform(cellPosWorld);
                 }
                 else
                 {
                     SetGhostVisibility(false);
-                }
-
-                // Place Selected Hex Tile
-                if (Mouse.current.leftButton.wasPressedThisFrame && isValidPlacement)
-                {
-                    GameObject currentPrefab = GetSelectedTilePrefab();
-                    if (currentPrefab != null)
-                    {
-                        Quaternion spawnRotation = Quaternion.Euler(0f, currentYRotation, 0f);
-                        GameObject newTile = Instantiate(currentPrefab, cellPosWorld, spawnRotation, hexGrid.transform);
-                        placedTiles[cellPos] = newTile;
-
-                        SetGhostVisibility(false);
-                    }
                 }
             }
             else
@@ -92,17 +68,99 @@ namespace LP.HexTileTDR.Core
         }
 
         /// <summary>
-        /// Clears dictionary and re-registers all current tile objects under hexGrid.
+        /// Call this method from UI Buttons to select a tile type for single placement.
         /// </summary>
+        public void SelectTilePrefab(GameObject prefab)
+        {
+            selectedTilePrefab = prefab;
+            RebuildGhostInstance();
+        }
+
+        /// <summary>
+        /// Cancels current placement mode manually (e.g., right click or Escape).
+        /// </summary>
+        /// <summary>
+        /// Cancels active placement mode and clears the ghost preview.
+        /// </summary>
+        public void CancelPlacement()
+        {
+            if (selectedTilePrefab == null && ghostTileInstance == null) return;
+
+            selectedTilePrefab = null;
+            if (ghostTileInstance != null)
+            {
+                Destroy(ghostTileInstance);
+                ghostTileInstance = null;
+            }
+            SetGhostVisibility(false);
+        }
+
+        public void TryPlaceSelectedTile()
+        {
+            if (selectedTilePrefab == null)
+            {
+                Debug.LogWarning("Placement failed: No tile prefab selected!");
+                return;
+            }
+
+            if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject())
+            {
+                Debug.LogWarning("Placement blocked: Pointer is over UI!");
+                return;
+            }
+
+            Vector2 pointerPosition = GetCurrentPointerPosition();
+            Ray ray = Camera.main.ScreenPointToRay(pointerPosition);
+
+            if (Physics.Raycast(ray, out RaycastHit hit, Mathf.Infinity, groundLayerMask))
+            {
+                Vector3Int cellPos = hexGrid.WorldToCell(hit.point);
+
+                if (!CanPlaceAt(cellPos))
+                {
+                    Debug.LogWarning($"Placement blocked: Cell {cellPos} is occupied or not adjacent to a tile.");
+                    return;
+                }
+
+                Vector3 cellPosWorld = hexGrid.GetCellCenterWorld(cellPos);
+                Quaternion spawnRotation = Quaternion.Euler(0f, currentYRotation, 0f);
+                GameObject newTile = Instantiate(selectedTilePrefab, cellPosWorld, spawnRotation, hexGrid.transform);
+                placedTiles[cellPos] = newTile;
+
+                Debug.Log($"Successfully placed tile at {cellPos}");
+                CancelPlacement();
+            }
+            else
+            {
+                Debug.LogWarning("Placement failed: Raycast did not hit the Ground layer!");
+            }
+        }
+
+        private Vector2 GetCurrentPointerPosition()
+        {
+            if (Pointer.current != null)
+            {
+                return Pointer.current.position.ReadValue();
+            }
+            return new Vector2(Screen.width / 2f, Screen.height / 2f);
+        }
+
+        public void RotateLeft()
+        {
+            currentYRotation = (currentYRotation - 60f + 360f) % 360f;
+        }
+
+        public void RotateRight()
+        {
+            currentYRotation = (currentYRotation + 60f) % 360f;
+        }
+
         public void ClearAndRegisterTiles()
         {
             placedTiles.Clear();
             RegisterPreplacedTiles();
         }
 
-        /// <summary>
-        /// Registers existing generated map tiles under the hexGrid transform into the tracking dictionary.
-        /// </summary>
         public void RegisterPreplacedTiles()
         {
             if (hexGrid == null) return;
@@ -121,32 +179,19 @@ namespace LP.HexTileTDR.Core
 
         public bool CanPlaceAt(Vector3Int cellPos)
         {
-            // Cannot place over an existing tile
-            if (IsCellOccupied(cellPos))
-            {
-                return false;
-            }
-
-            // If map is completely empty, allow placement anywhere
-            if (!HasAnyTilesOnMap())
-            {
-                return true;
-            }
-
-            // Must be adjacent to at least one existing tile
+            if (IsCellOccupied(cellPos)) return false;
+            if (!HasAnyTilesOnMap()) return true;
             return HasAdjacentTile(cellPos);
         }
 
         private bool IsCellOccupied(Vector3Int cellPos)
         {
-            // Dictionary check (prunes null destroyed references if any exist)
             if (placedTiles.TryGetValue(cellPos, out GameObject existingTile))
             {
                 if (existingTile != null) return true;
-                placedTiles.Remove(cellPos); // Clean stale key
+                placedTiles.Remove(cellPos);
             }
 
-            // Physics overlap check
             Vector3 worldCenter = hexGrid.GetCellCenterWorld(cellPos);
             Collider[] colliders = Physics.OverlapSphere(worldCenter, 0.2f, tileLayerMask);
 
@@ -163,7 +208,6 @@ namespace LP.HexTileTDR.Core
 
         private bool HasAnyTilesOnMap()
         {
-            // Clean dictionary of nulls
             List<Vector3Int> staleKeys = new List<Vector3Int>();
             foreach (var kvp in placedTiles)
             {
@@ -183,46 +227,11 @@ namespace LP.HexTileTDR.Core
 
         private bool HasAdjacentTile(Vector3Int cellPos)
         {
-            Vector3Int[] neighbors = GetHexNeighbors(cellPos);
-            foreach (var neighbor in neighbors)
+            foreach (var neighbor in GetHexNeighbors(cellPos))
             {
-                if (IsCellOccupied(neighbor))
-                {
-                    return true;
-                }
+                if (IsCellOccupied(neighbor)) return true;
             }
             return false;
-        }
-
-        private void HandleRotationInput()
-        {
-            if (Keyboard.current == null) return;
-
-            // Rotate left 60 degrees on "Q"
-            if (Keyboard.current.qKey.wasPressedThisFrame)
-            {
-                currentYRotation = (currentYRotation - 60f + 360f) % 360f;
-            }
-
-            // Rotate right 60 degrees on "E"
-            if (Keyboard.current.eKey.wasPressedThisFrame)
-            {
-                currentYRotation = (currentYRotation + 60f) % 360f;
-            }
-        }
-
-        public void CycleNextTile()
-        {
-            if (availableTilePrefabs == null || availableTilePrefabs.Count <= 1) return;
-
-            currentTileIndex = (currentTileIndex + 1) % availableTilePrefabs.Count;
-            RebuildGhostInstance();
-        }
-
-        public GameObject GetSelectedTilePrefab()
-        {
-            if (availableTilePrefabs == null || availableTilePrefabs.Count == 0) return null;
-            return availableTilePrefabs[currentTileIndex];
         }
 
         private Vector3Int[] GetHexNeighbors(Vector3Int cell)
@@ -257,15 +266,10 @@ namespace LP.HexTileTDR.Core
 
         private void RebuildGhostInstance()
         {
-            if (ghostTileInstance != null)
-            {
-                Destroy(ghostTileInstance);
-            }
+            if (ghostTileInstance != null) Destroy(ghostTileInstance);
+            if (selectedTilePrefab == null) return;
 
-            GameObject currentPrefab = GetSelectedTilePrefab();
-            if (currentPrefab == null) return;
-
-            ghostTileInstance = Instantiate(currentPrefab);
+            ghostTileInstance = Instantiate(selectedTilePrefab);
             ghostTileInstance.name = "HexGhostPreview";
 
             foreach (var col in ghostTileInstance.GetComponentsInChildren<Collider>())
@@ -273,10 +277,9 @@ namespace LP.HexTileTDR.Core
                 Destroy(col);
             }
 
-            ghostRenderers = ghostTileInstance.GetComponentsInChildren<Renderer>();
             if (ghostMaterial != null)
             {
-                foreach (var rend in ghostRenderers)
+                foreach (var rend in ghostTileInstance.GetComponentsInChildren<Renderer>())
                 {
                     rend.material = ghostMaterial;
                 }
@@ -302,15 +305,6 @@ namespace LP.HexTileTDR.Core
             {
                 ghostTileInstance.SetActive(visible);
                 isGhostActive = visible;
-            }
-        }
-
-        public void ToggleGhostPreview(bool enable)
-        {
-            enableGhostPreview = enable;
-            if (!enable)
-            {
-                SetGhostVisibility(false);
             }
         }
     }
