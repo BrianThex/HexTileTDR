@@ -31,7 +31,6 @@ namespace LP.HexTileTDR.Core
 
         private void Update()
         {
-            // Do not display ghost if no tile is selected for placement
             if (selectedTilePrefab == null)
             {
                 SetGhostVisibility(false);
@@ -67,21 +66,12 @@ namespace LP.HexTileTDR.Core
             }
         }
 
-        /// <summary>
-        /// Call this method from UI Buttons to select a tile type for single placement.
-        /// </summary>
         public void SelectTilePrefab(GameObject prefab)
         {
             selectedTilePrefab = prefab;
             RebuildGhostInstance();
         }
 
-        /// <summary>
-        /// Cancels current placement mode manually (e.g., right click or Escape).
-        /// </summary>
-        /// <summary>
-        /// Cancels active placement mode and clears the ghost preview.
-        /// </summary>
         public void CancelPlacement()
         {
             if (selectedTilePrefab == null && ghostTileInstance == null) return;
@@ -97,15 +87,10 @@ namespace LP.HexTileTDR.Core
 
         public void TryPlaceSelectedTile()
         {
-            if (selectedTilePrefab == null)
-            {
-                Debug.LogWarning("Placement failed: No tile prefab selected!");
-                return;
-            }
+            if (selectedTilePrefab == null) return;
 
             if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject())
             {
-                Debug.LogWarning("Placement blocked: Pointer is over UI!");
                 return;
             }
 
@@ -116,23 +101,14 @@ namespace LP.HexTileTDR.Core
             {
                 Vector3Int cellPos = hexGrid.WorldToCell(hit.point);
 
-                if (!CanPlaceAt(cellPos))
-                {
-                    Debug.LogWarning($"Placement blocked: Cell {cellPos} is occupied or not adjacent to a tile.");
-                    return;
-                }
+                if (!CanPlaceAt(cellPos)) return;
 
                 Vector3 cellPosWorld = hexGrid.GetCellCenterWorld(cellPos);
                 Quaternion spawnRotation = Quaternion.Euler(0f, currentYRotation, 0f);
                 GameObject newTile = Instantiate(selectedTilePrefab, cellPosWorld, spawnRotation, hexGrid.transform);
                 placedTiles[cellPos] = newTile;
 
-                Debug.Log($"Successfully placed tile at {cellPos}");
                 CancelPlacement();
-            }
-            else
-            {
-                Debug.LogWarning("Placement failed: Raycast did not hit the Ground layer!");
             }
         }
 

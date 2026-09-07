@@ -23,11 +23,7 @@ namespace LP.HexTileTDR.Core
 
         private void Awake()
         {
-            if (inputActionAsset == null)
-            {
-                Debug.LogError("InputHandler: 'Input Action Asset' reference is missing in the Inspector!");
-                return;
-            }
+            if (inputActionAsset == null) return;
 
             moveAction = inputActionAsset.FindAction("Player/Move");
             sprintAction = inputActionAsset.FindAction("Player/Sprint");
@@ -75,9 +71,7 @@ namespace LP.HexTileTDR.Core
         {
             if (cameraController == null || zoomAction == null) return;
 
-            // Read input as Vector2 instead of float to match Mouse Scroll DeltaControl
             Vector2 zoomInput = zoomAction.ReadValue<Vector2>();
-
             if (Mathf.Abs(zoomInput.y) > 0.01f)
             {
                 cameraController.ProcessZoom(zoomInput.y);
@@ -100,7 +94,6 @@ namespace LP.HexTileTDR.Core
 
             if (placeTileAction != null && placeTileAction.WasPressedThisFrame())
             {
-                // Do not trigger tile placement if the click originated on a UI element
                 if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject())
                 {
                     return;
